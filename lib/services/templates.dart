@@ -1,0 +1,93 @@
+const String workflowPath = '.github/workflows/build_apk.yml';
+const String workflowFileName = 'build_apk.yml';
+
+/// CI workflow injected into every generated project.
+/// `__PROJECT_NAME__` is replaced with the Dart package name.
+const String workflowTemplate = r'''name: Build Flutter APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate Android platform files
+        run: |
+          HAD_WIDGET_TEST=0
+          if [ -f test/widget_test.dart ]; then HAD_WIDGET_TEST=1; fi
+          flutter create . --platforms=android --project-name __PROJECT_NAME__ --org com.example
+          if [ "$HAD_WIDGET_TEST" = "0" ]; then rm -f test/widget_test.dart; fi
+
+      - name: Allow internet access in release builds
+        run: |
+          python3 - <<'PY'
+          import re
+          path = "android/app/src/main/AndroidManifest.xml"
+          text = open(path, encoding="utf-8").read()
+          if "android.permission.INTERNET" not in text:
+              tag = '<uses-permission android:name="android.permission.INTERNET"/>'
+              text = re.sub(r"(<manifest[^>]*>)", lambda m: m.group(1) + "\n    " + tag, text, count=1)
+          open(path, "w", encoding="utf-8").write(text)
+          PY
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Test
+        run: flutter test
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+''';
+
+const String gitignoreTemplate = r'''.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+android/
+ios/
+web/
+linux/
+macos/
+windows/
+.metadata
+*.iml
+.idea/
+.vscode/
+''';
+
+const String analysisOptionsWithLints =
+    'include: package:flutter_lints/flutter.yaml\n';
+
+const String analysisOptionsMinimal = 'linter:\n  rules:\n';
