@@ -28,6 +28,7 @@ jobs:
       - name: Generate Android platform files
         run: |
           flutter create . --platforms=android --project-name ai_app_factory --org com.example
+          rm -f test/widget_test.dart
 
       - name: Allow internet access in release builds
         run: |
